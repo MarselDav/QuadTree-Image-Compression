@@ -1,0 +1,350 @@
+#include "quadtree.h"
+#include <iostream>
+
+QuadTree::QuadTree()
+{
+    root = nullptr;
+}
+
+// Функция для вычисления евклидова расстояния между двумя цветами
+double QuadTree::calculateColorDistance(const QColor& color1, const QColor& color2) {
+    double deltaR = color1.red() - color2.red();
+    double deltaG = color1.green() - color2.green();
+    double deltaB = color1.blue() - color2.blue();
+
+    return std::sqrt(deltaR * deltaR + deltaG * deltaG + deltaB * deltaB);
+}
+
+// Функция для проверки приблизительной однородности 4 цветов
+bool QuadTree::areColorsApproximatelyEqual(const QColor& color1, const QColor& color2,
+                                 const QColor& color3, const QColor& color4, const QColor& averageColor) {
+//    double distance12 = calculateColorDistance(color1, color2);
+//    double distance13 = calculateColorDistance(color1, color3);
+//    double distance14 = calculateColorDistance(color1, color4);
+    double distance1 = calculateColorDistance(color1, averageColor);
+    double distance2 = calculateColorDistance(color2, averageColor);
+    double distance3 = calculateColorDistance(color3, averageColor);
+    double distance4 = calculateColorDistance(color4, averageColor);
+
+//    return (distance12 < THRESHOLD) && (distance13 < THRESHOLD) && (distance14 < THRESHOLD);
+    return (distance1 < THRESHOLD) && (distance2 < THRESHOLD) && (distance3 < THRESHOLD) && (distance4 < THRESHOLD);
+}
+
+
+bool QuadTree::areColorsApproximatelyEqual(const QColor& color1, const QColor& color2)
+{
+    double distance = calculateColorDistance(color1, color2);
+
+    return (distance < THRESHOLD);
+}
+
+int QuadTree::calculateErrorBetweenImages(QImage image1, QImage image2)
+{
+    int error = 0;
+    if (image1.size() == image2.size())
+    {
+        for (int y = 0; y < image1.size().height(); y++)
+        {
+            for (int x = 0; x < image1.size().width(); x++)
+            {
+                QColor pixelColor1 = image1.pixel(x, y);
+                QColor pixelColor2 = image2.pixel(x, y);
+                error += calculateColorDistance(pixelColor1, pixelColor2);
+            }
+        }
+    }
+    else
+    {
+        qDebug() << "Sizes is not equal";
+    }
+    return error;
+}
+
+void QuadTree::loadImage(QString path)
+{
+    QImage image(path);
+
+    // Проверка на успешную загрузку
+    if (image.isNull()) {
+        qDebug() << "Failed to load image";
+        return;
+    }
+
+    QSize size = image.size();
+    int x = size.width();
+    int y = size.height();
+
+//    std::cout << "GeneralError = [";
+//    for (int threshold = 0; threshold < 200; threshold++)
+//    {
+//        root = loadImageHelperMethodThree(threshold, 0, x, 0, y, image);
+
+//        QImage *result = convertToImage(1024, 1024);
+//        GeneralError = calculateErrorBetweenImages(image, *result);
+
+//        std::cout << GeneralError << ", ";
+//    }
+//    std::cout << "]";
+
+    std::cout << "GeneralError = [";
+    for (int threshold = 1; threshold < 400; threshold++)
+    {
+        THRESHOLD = threshold;
+        root = loadImageHelperMethodTwo(0, x, 0, y, image);
+
+        QImage *result = convertToImage(1024, 1024);
+        GeneralError = calculateErrorBetweenImages(image, *result);
+
+        std::cout << GeneralError << ", ";
+    }
+    std::cout << "]";
+    //root = loadImageHelperMethodThree(28, 0, x, 0, y, image);
+    //root = loadImageHelperMethodTwo(0, x, 0, y, image);
+}
+
+
+
+QuadTree::Node* QuadTree::loadImageHelper(int x, int width, int y, int height, const QImage& image)
+{
+    Node* newNode = new Node();
+
+    int red = 0;
+    int green = 0;
+    int blue = 0;
+
+    if (width == 1 && height == 1)
+    {
+        QRgb pixelColor = image.pixel(x, y);
+
+        red = qRed(pixelColor);
+        green = qGreen(pixelColor);
+        blue = qBlue(pixelColor);
+    }
+    else
+    {
+        Node* topLeft = loadImageHelper(x, width / 2, y, height / 2, image);
+        Node* topRight = loadImageHelper(x + width / 2, width / 2, y, height / 2, image);
+        Node* bottomLeft = loadImageHelper(x, width / 2, y + height / 2, height / 2, image);
+        Node* bottomRight = loadImageHelper(x + width / 2, width / 2, y + height / 2, height / 2, image);
+
+        QColor topLeftColor = topLeft->color;
+        QColor topRightColor = topRight->color;
+        QColor bottomLeftColor = bottomLeft->color;
+        QColor bottomRightColor = bottomRight->color;
+
+        red = (topLeftColor.red() + topRightColor.red() + bottomLeftColor.red() + bottomRightColor.red()) / 4;
+        green = (topLeftColor.green() + topRightColor.green() + bottomLeftColor.green() + bottomRightColor.green()) / 4;
+        blue = (topLeftColor.blue() + topRightColor.blue() + bottomLeftColor.blue() + bottomRightColor.blue()) / 4;
+
+        QColor averageColor(red, green, blue);
+
+        if (areColorsApproximatelyEqual(topLeftColor, topRightColor, bottomLeftColor, bottomRightColor, averageColor))
+        {
+            delete topLeft;
+            delete topRight;
+            delete bottomLeft;
+            delete bottomRight;
+        }
+        else
+        {
+            newNode->topLeft = topLeft;
+            newNode->topRight = topRight;
+            newNode->bottomLeft = bottomLeft;
+            newNode->bottomRight = bottomRight;
+        }
+
+    }
+
+    newNode->setRGB(red, green, blue);
+    return newNode;
+}
+
+
+QuadTree::Node* QuadTree::loadImageHelperMethodTwo(int x, int width, int y, int height, const QImage& image)
+{
+    Node* newNode = new Node();
+
+    int Red = 0;
+    int Green = 0;
+    int Blue = 0;
+
+    int pixelsCnt = height * width;
+    for (int i = y; i < y + height; i++)
+    {
+        for (int j = x; j < x + width; j++)
+        {
+            QRgb pixelColor = image.pixel(j, i);
+
+            int red = qRed(pixelColor);
+            int green = qGreen(pixelColor);
+            int blue = qBlue(pixelColor);
+
+            Red += red;
+            Green += green;
+            Blue += blue;
+        }
+    }
+    QColor averageColor(Red / pixelsCnt, Green / pixelsCnt, Blue / pixelsCnt);
+    Red = Red / pixelsCnt;
+    Green = Green / pixelsCnt;
+    Blue = Blue / pixelsCnt;
+
+    bool isEqual = true;
+    //double error = 0;
+    for (int i = y; i < y + height; i++)
+    {
+        for (int j = x; j < x + width; j++)
+        {
+            QColor pixelColor = image.pixel(j, i);
+
+            //error += calculateColorDistance(pixelColor,averageColor);
+            isEqual = areColorsApproximatelyEqual(pixelColor, averageColor);
+            if (!isEqual)
+                break;
+        }
+        if (!isEqual)
+            break;
+    }
+    //error = error / (width*height);
+//    if (!isEqual)
+    //qDebug() << error;
+    if (!isEqual)
+    {
+        Node* topLeft = loadImageHelperMethodTwo(x, width / 2, y, height / 2, image);
+        Node* topRight = loadImageHelperMethodTwo(x + width / 2, width / 2, y, height / 2, image);
+        Node* bottomLeft = loadImageHelperMethodTwo(x, width / 2, y + height / 2, height / 2, image);
+        Node* bottomRight = loadImageHelperMethodTwo(x + width / 2, width / 2, y + height / 2, height / 2, image);
+
+        QColor topLeftColor = topLeft->color;
+        QColor topRightColor = topRight->color;
+        QColor bottomLeftColor = bottomLeft->color;
+        QColor bottomRightColor = bottomRight->color;
+
+        Red = (topLeftColor.red() + topRightColor.red() + bottomLeftColor.red() + bottomRightColor.red()) / 4;
+        Green = (topLeftColor.green() + topRightColor.green() + bottomLeftColor.green() + bottomRightColor.green()) / 4;
+        Blue = (topLeftColor.blue() + topRightColor.blue() + bottomLeftColor.blue() + bottomRightColor.blue()) / 4;
+
+        QColor averageColor(Red, Green, Blue);
+
+        newNode->topLeft = topLeft;
+        newNode->topRight = topRight;
+        newNode->bottomLeft = bottomLeft;
+        newNode->bottomRight = bottomRight;
+    }
+
+    newNode->setRGB(Red, Green, Blue);
+    return newNode;
+}
+
+QuadTree::Node* QuadTree::loadImageHelperMethodThree(int threshold, int x, int width, int y, int height, const QImage& image)
+{
+    Node* newNode = new Node();
+
+    int Red = 0;
+    int Green = 0;
+    int Blue = 0;
+
+    int pixelsCnt = height * width;
+    for (int i = y; i < y + height; i++)
+    {
+        for (int j = x; j < x + width; j++)
+        {
+            QRgb pixelColor = image.pixel(j, i);
+
+            int red = qRed(pixelColor);
+            int green = qGreen(pixelColor);
+            int blue = qBlue(pixelColor);
+
+            Red += red;
+            Green += green;
+            Blue += blue;
+        }
+    }
+    QColor averageColor(Red / pixelsCnt, Green / pixelsCnt, Blue / pixelsCnt);
+    Red = Red / pixelsCnt;
+    Green = Green / pixelsCnt;
+    Blue = Blue / pixelsCnt;
+
+    double error = 0;
+    for (int i = y; i < y + height; i++)
+    {
+        for (int j = x; j < x + width; j++)
+        {
+            QColor pixelColor = image.pixel(j, i);
+
+            error += calculateColorDistance(pixelColor,averageColor);
+        }
+    }
+    error = error / (width*height);
+    if (error > threshold)
+    {
+        Node* topLeft = loadImageHelperMethodThree(threshold, x, width / 2, y, height / 2, image);
+        Node* topRight = loadImageHelperMethodThree(threshold, x + width / 2, width / 2, y, height / 2, image);
+        Node* bottomLeft = loadImageHelperMethodThree(threshold, x, width / 2, y + height / 2, height / 2, image);
+        Node* bottomRight = loadImageHelperMethodThree(threshold, x + width / 2, width / 2, y + height / 2, height / 2, image);
+
+        QColor topLeftColor = topLeft->color;
+        QColor topRightColor = topRight->color;
+        QColor bottomLeftColor = bottomLeft->color;
+        QColor bottomRightColor = bottomRight->color;
+
+        Red = (topLeftColor.red() + topRightColor.red() + bottomLeftColor.red() + bottomRightColor.red()) / 4;
+        Green = (topLeftColor.green() + topRightColor.green() + bottomLeftColor.green() + bottomRightColor.green()) / 4;
+        Blue = (topLeftColor.blue() + topRightColor.blue() + bottomLeftColor.blue() + bottomRightColor.blue()) / 4;
+
+        QColor averageColor(Red, Green, Blue);
+
+        newNode->topLeft = topLeft;
+        newNode->topRight = topRight;
+        newNode->bottomLeft = bottomLeft;
+        newNode->bottomRight = bottomRight;
+    }
+
+    newNode->setRGB(Red, Green, Blue);
+    return newNode;
+}
+
+QImage* QuadTree::convertToImage(int width, int height)
+{
+    QImage *image = new QImage(width, height, QImage::Format_RGB888);
+    convertToImageHelper(0, width, 0, height, image, root);
+    return image;
+}
+
+bool QuadTree::noChildren(Node *node)
+{
+    bool haveTopLeft = node->topLeft == nullptr;
+    bool haveTopRight = node->topRight == nullptr;
+    bool haveBottomLeft= node->bottomLeft == nullptr;
+    bool haveBottomRight = node->bottomRight == nullptr;
+    return haveTopLeft * haveTopRight * haveBottomLeft * haveBottomRight;
+}
+
+void QuadTree::convertToImageHelper(int x, int width, int y, int height, QImage *image, Node* node)
+{
+    if (noChildren(node))
+    {
+        if (width != 1 && height != 1)
+        {
+            for (int i = y; i < y + height; i++)
+            {
+                for (int j = x; j < x + width; j++)
+                {
+                    image->setPixel(j, i, node->color.rgb());
+                }
+            }
+        }
+        else
+        {
+            image->setPixel(x, y, node->color.rgb());
+        }
+        //image->setPixel(x, y, node->color.rgb());
+    }
+    else
+    {
+        convertToImageHelper(x, width/2, y, height/2, image, node->topLeft);
+        convertToImageHelper(x + width/2, width/2, y, height/2, image, node->topRight);
+        convertToImageHelper(x, width/2, y + height/2, height/2, image, node->bottomLeft);
+        convertToImageHelper(x + width/2, width/2, y + height/2, height/2,image, node->bottomRight);
+    }
+}
